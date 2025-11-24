@@ -59,6 +59,7 @@ fun SwipeableCard(
     photo: Photo,
     onSwipeLeft: () -> Unit,
     onSwipeRight: () -> Unit,
+    onSwipeUp: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val offsetX = remember { Animatable(0f) }
@@ -98,6 +99,21 @@ fun SwipeableCard(
                             onSwipeRight()
                         }
                     },
+                    onSwipeUp = {
+                        scope.launch {
+                            // Animate back to center after swipe up (or animate out if desired, but usually details view opens)
+                             offsetX.animateTo(
+                                targetValue = 0f,
+                                animationSpec = androidx.compose.animation.core.spring(
+                                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+                                )
+                            )
+                            offsetY.animateTo(0f)
+                            rotation.animateTo(0f)
+                            onSwipeUp()
+                        }
+                    },
                     onDrag = { change, dragAmount ->
                         scope.launch {
                             offsetX.snapTo(offsetX.value + dragAmount.x)
@@ -108,7 +124,17 @@ fun SwipeableCard(
                     onDragEnd = {
                         scope.launch {
                             // Reduced threshold to 15% of width for easier swipe
-                            if (offsetX.value.absoluteValue < size.width.toFloat() * 0.15f) {
+                            val width = size.width.toFloat()
+                            val height = size.height.toFloat()
+                            
+                            if (offsetY.value < -height * 0.15f) {
+                                // Swipe Up detected
+                                onSwipeUp()
+                                // Reset position
+                                offsetX.animateTo(0f)
+                                offsetY.animateTo(0f)
+                                rotation.animateTo(0f)
+                            } else if (offsetX.value.absoluteValue < width * 0.15f) {
                                 offsetX.animateTo(
                                     targetValue = 0f,
                                     animationSpec = androidx.compose.animation.core.spring(
@@ -121,7 +147,7 @@ fun SwipeableCard(
                             } else {
                                 if (offsetX.value > 0) {
                                     offsetX.animateTo(
-                                        targetValue = size.width.toFloat() * 1.5f,
+                                        targetValue = width * 1.5f,
                                         animationSpec = androidx.compose.animation.core.spring(
                                             dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
                                             stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
@@ -130,7 +156,7 @@ fun SwipeableCard(
                                     onSwipeRight()
                                 } else {
                                     offsetX.animateTo(
-                                        targetValue = -size.width.toFloat() * 1.5f,
+                                        targetValue = -width * 1.5f,
                                         animationSpec = androidx.compose.animation.core.spring(
                                             dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
                                             stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
@@ -223,6 +249,13 @@ fun SwipeableCard(
                                 color = Color.White.copy(alpha = 0.8f)
                             )
                         }
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            text = "${String.format("%.1f", photo.size / (1024f * 1024f))} MB",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = Color.White
+                        )
                         Spacer(Modifier.weight(1f))
                         if (photo.isVideo) {
                             Text(
@@ -309,6 +342,7 @@ fun SwipeableCard(
 suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectSwipe(
     onSwipeLeft: () -> Unit,
     onSwipeRight: () -> Unit,
+    onSwipeUp: () -> Unit,
     onDrag: (change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Offset) -> Unit,
     onDragEnd: () -> Unit
 ) {

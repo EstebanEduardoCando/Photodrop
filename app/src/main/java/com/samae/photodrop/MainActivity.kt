@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -39,6 +40,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -62,6 +66,7 @@ import com.samae.photodrop.data.UserPreferences
 import com.samae.photodrop.ui.OnboardingScreen
 import com.samae.photodrop.ui.PhotoViewModel
 import kotlinx.coroutines.launch
+import com.samae.photodrop.ui.SortOption
 import com.samae.photodrop.ui.SwipeableCard
 import com.samae.photodrop.ui.theme.PhotodropTheme
 
@@ -148,7 +153,10 @@ class MainActivity : ComponentActivity() {
         val deletionSummary by viewModel.deletionSummary.collectAsState()
 
         var showFolderDropdown by remember { mutableStateOf(false) }
+        var showSortMenu by remember { mutableStateOf(false) }
+        var selectedPhotoForDetails by remember { mutableStateOf<com.samae.photodrop.data.Photo?>(null) }
         val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+        val sortOption by viewModel.sortOption.collectAsState()
 
         LaunchedEffect(permissionIntent) {
             permissionIntent?.let { intentSender ->
@@ -204,6 +212,48 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     actions = {
+                        // Sort/Filter button
+                        Icon(
+                            imageVector = Icons.Default.FilterList,
+                            contentDescription = "Sort",
+                            modifier = Modifier
+                                .clickable { showSortMenu = true }
+                                .padding(8.dp)
+                        )
+                        DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Newest First") },
+                                onClick = {
+                                    viewModel.setSortOption(SortOption.DATE_DESC)
+                                    showSortMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Oldest First") },
+                                onClick = {
+                                    viewModel.setSortOption(SortOption.DATE_ASC)
+                                    showSortMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Largest First") },
+                                onClick = {
+                                    viewModel.setSortOption(SortOption.SIZE_DESC)
+                                    showSortMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Smallest First") },
+                                onClick = {
+                                    viewModel.setSortOption(SortOption.SIZE_ASC)
+                                    showSortMenu = false
+                                }
+                            )
+                        }
+                        
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                              // Android 14+ Manage Access
                              Icon(
@@ -276,6 +326,7 @@ class MainActivity : ComponentActivity() {
                                 photo = photos[1],
                                 onSwipeLeft = {},
                                 onSwipeRight = {},
+                                onSwipeUp = {},
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .graphicsLayer {
@@ -294,11 +345,65 @@ class MainActivity : ComponentActivity() {
                             photo = photos[0],
                             onSwipeLeft = { viewModel.swipeLeft(photos[0]) },
                             onSwipeRight = { viewModel.swipeRight(photos[0]) },
+                            onSwipeUp = { selectedPhotoForDetails = photos[0] },
                             modifier = Modifier.fillMaxSize()
                         )
                     }
                 }
+
+                // Metadata Details Bottom Sheet
+                selectedPhotoForDetails?.let { photo ->
+                    ModalBottomSheet(
+                        onDismissRequest = { selectedPhotoForDetails = null },
+                        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp)
+                        ) {
+                            Text(
+                                text = "Photo Details",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.padding(8.dp))
+                            
+                            DetailRow("Date", java.text.SimpleDateFormat("MMM dd, yyyy - hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(photo.dateAdded * 1000)))
+                            DetailRow("Size", "${String.format("%.2f", photo.size / (1024f * 1024f))} MB (${photo.size} bytes)")
+                            DetailRow("Type", if (photo.isVideo) "Video" else "Image")
+                            if (photo.isVideo) {
+                                DetailRow("Duration", android.text.format.DateUtils.formatElapsedTime(photo.duration / 1000))
+                            }
+                            DetailRow("Path", photo.uri.toString())
+                            
+                            Spacer(modifier = Modifier.padding(16.dp))
+                        }
+                    }
+                }
             }
+        }
+    }
+    
+    @Composable
+    fun DetailRow(label: String, value: String) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = label, 
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, 
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.width(16.dp))
+            Text(
+                text = value, 
+                modifier = Modifier.weight(1f), 
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
     }
 }

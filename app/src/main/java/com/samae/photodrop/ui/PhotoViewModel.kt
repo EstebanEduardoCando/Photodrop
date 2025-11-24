@@ -12,6 +12,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+enum class SortOption {
+    DATE_DESC,  // Newest first
+    DATE_ASC,   // Oldest first
+    SIZE_DESC,  // Largest first
+    SIZE_ASC    // Smallest first
+}
+
 class PhotoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = PhotoRepository(application)
@@ -34,6 +41,9 @@ class PhotoViewModel(application: Application) : AndroidViewModel(application) {
     private val _deletionSummary = MutableStateFlow<String?>(null)
     val deletionSummary: StateFlow<String?> = _deletionSummary.asStateFlow()
 
+    private val _sortOption = MutableStateFlow(SortOption.DATE_DESC)
+    val sortOption: StateFlow<SortOption> = _sortOption.asStateFlow()
+
     init {
         loadFolders()
         loadPhotos()
@@ -52,7 +62,22 @@ class PhotoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadPhotos() {
         viewModelScope.launch {
-            _photos.value = repository.getPhotos(_selectedFolder.value?.id)
+            val photos = repository.getPhotos(_selectedFolder.value?.id)
+            _photos.value = sortPhotos(photos)
+        }
+    }
+
+    fun setSortOption(option: SortOption) {
+        _sortOption.value = option
+        _photos.value = sortPhotos(_photos.value)
+    }
+
+    private fun sortPhotos(photos: List<Photo>): List<Photo> {
+        return when (_sortOption.value) {
+            SortOption.DATE_DESC -> photos.sortedByDescending { it.dateAdded }
+            SortOption.DATE_ASC -> photos.sortedBy { it.dateAdded }
+            SortOption.SIZE_DESC -> photos.sortedByDescending { it.size }
+            SortOption.SIZE_ASC -> photos.sortedBy { it.size }
         }
     }
 
