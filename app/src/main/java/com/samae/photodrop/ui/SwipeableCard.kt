@@ -3,7 +3,8 @@ package com.samae.photodrop.ui
 import android.text.format.DateUtils
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -39,7 +40,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.samae.photodrop.data.Photo
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -62,53 +63,116 @@ fun SwipeableCard(
     onDoubleTap: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val offsetX = remember { Animatable(0f) }
-    val offsetY = remember { Animatable(0f) }
-    val rotation = remember { Animatable(0f) }
+    // Use mutableState for drag updates (no coroutines needed)
+    var dragOffsetX by remember { mutableStateOf(0f) }
+    var dragOffsetY by remember { mutableStateOf(0f) }
+    var dragRotation by remember { mutableStateOf(0f) }
+    
+    // Use Animatable only for animations
+    val animOffsetX = remember { Animatable(0f) }
+    val animOffsetY = remember { Animatable(0f) }
+    val animRotation = remember { Animatable(0f) }
+    
     val scope = rememberCoroutineScope()
     var isPlaying by remember { mutableStateOf(false) }
+    var isDragging by remember { mutableStateOf(false) }
+
+    // Combine drag and animation offsets
+    val finalOffsetX = if (isDragging) dragOffsetX else animOffsetX.value
+    val finalOffsetY = if (isDragging) dragOffsetY else animOffsetY.value
+    val finalRotation = if (isDragging) dragRotation else animRotation.value
 
     BoxWithConstraints(
         modifier = modifier
-            .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
-            .rotate(rotation.value)
+            .offset { IntOffset(finalOffsetX.roundToInt(), finalOffsetY.roundToInt()) }
+            .rotate(finalRotation)
             .pointerInput(Unit) {
-                val widthPx = size.width.toFloat()
-                detectSwipe(
-                    onSwipeLeft = {
-                        // Trigger callback immediately, no animation here
-                        onSwipeLeft()
-                    },
-                    onSwipeRight = {
-                        // Trigger callback immediately, no animation here
-                        onSwipeRight()
-                    },
-                    onDrag = { change, dragAmount ->
-                        // Direct snap - no coroutine launch for every drag event
-                        offsetX.snapTo(offsetX.value + dragAmount.x)
-                        offsetY.snapTo(offsetY.value + dragAmount.y)
-                        rotation.snapTo(offsetX.value / 60)
-                    },
-                    onDragEnd = {
+                // Unified gesture handler - covers ENTIRE card area
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    val downTime = System.currentTimeMillis()
+                    var dragStarted = false
+                    var totalDrag = Offset.Zero
+                    
+                    // Wait to see what gesture this is
+                    var waitingForGesture = true
+                    var pressJob: kotlinx.coroutines.Job? = null
+                    
+                    // Start long press timer for video
+                    if (photo.isVideo) {
+                        pressJob = scope.launch {
+                            kotlinx.coroutines.delay(200) // Long press threshold
+                            if (waitingForGesture) {
+                                isPlaying = true
+                            }
+                        }
+                    }
+                    
+                    do {
+                        val event = awaitPointerEvent()
+                        val changes = event.changes
+                        val change = changes.firstOrNull()
+                        
+                        if (change != null) {
+                            val dragDelta = change.positionChange()
+                            totalDrag += dragDelta
+                            
+                            // If moved more than threshold, it's a drag
+                            if (totalDrag.getDistance() > 10f && !dragStarted) {
+                                dragStarted = true
+                                waitingForGesture = false
+                                pressJob?.cancel()
+                                isPlaying = false
+                            }
+                            
+                            if (dragStarted) {
+                                // Handle drag - FAST, direct state update
+                                isDragging = true
+                                dragOffsetX += dragDelta.x
+                                dragOffsetY += dragDelta.y
+                                dragRotation = dragOffsetX / 60
+                                change.consume()
+                            }
+                        }
+                    } while (changes.any { it.pressed })
+                    
+                    // Gesture ended
+                    pressJob?.cancel()
+                    val upTime = System.currentTimeMillis()
+                    val pressDuration = upTime - downTime
+                    
+                    if (dragStarted) {
+                        // Was a drag - handle swipe
                         scope.launch {
                             val width = size.width.toFloat()
-                            val threshold = width * 0.20f // Slightly higher threshold for better control
+                            val threshold = width * 0.20f
                             
-                            if (offsetX.value.absoluteValue < threshold) {
-                                // Snap back to center - fast animation
-                                offsetX.animateTo(
+                            // Copy current drag values to animatable
+                            animOffsetX.snapTo(dragOffsetX)
+                            animOffsetY.snapTo(dragOffsetY)
+                            animRotation.snapTo(dragRotation)
+                            
+                            // Reset drag state
+                            isDragging = false
+                            dragOffsetX = 0f
+                            dragOffsetY = 0f
+                            dragRotation = 0f
+                            
+                            if (animOffsetX.value.absoluteValue < threshold) {
+                                // Snap back to center
+                                animOffsetX.animateTo(
                                     targetValue = 0f,
                                     animationSpec = androidx.compose.animation.core.tween(
                                         durationMillis = 200,
                                         easing = androidx.compose.animation.core.FastOutSlowInEasing
                                     )
                                 )
-                                offsetY.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(200))
-                                rotation.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(200))
+                                animOffsetY.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(200))
+                                animRotation.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(200))
                             } else {
-                                // Swipe out - VERY fast animation
-                                val targetX = if (offsetX.value > 0) width * 2f else -width * 2f
-                                offsetX.animateTo(
+                                // Swipe out
+                                val targetX = if (animOffsetX.value > 0) width * 2f else -width * 2f
+                                animOffsetX.animateTo(
                                     targetValue = targetX,
                                     animationSpec = androidx.compose.animation.core.tween(
                                         durationMillis = 150,
@@ -116,28 +180,30 @@ fun SwipeableCard(
                                     )
                                 )
                                 // Call action based on direction
-                                if (offsetX.value > 0) onSwipeRight() else onSwipeLeft()
+                                if (animOffsetX.value > 0) onSwipeRight() else onSwipeLeft()
+                            }
+                        }
+                    } else {
+                        // Was a tap
+                        isPlaying = false
+                        
+                        // Check for double tap
+                        if (pressDuration < 300) {
+                            // Wait to see if there's another tap
+                            val secondDown = withTimeoutOrNull(300) {
+                                awaitFirstDown()
+                            }
+                            
+                            if (secondDown != null) {
+                                // Double tap detected
+                                onDoubleTap()
+                                // Consume the second tap
+                                do {
+                                    val event = awaitPointerEvent()
+                                } while (event.changes.any { it.pressed })
                             }
                         }
                     }
-                )
-            }
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onDoubleTap = {
-                        onDoubleTap()
-                    }
-                )
-            }
-            .pointerInput(Unit) {
-                if (photo.isVideo) {
-                    detectTapGestures(
-                        onPress = {
-                            isPlaying = true
-                            tryAwaitRelease()
-                            isPlaying = false
-                        }
-                    )
                 }
             }
     ) {
@@ -231,11 +297,10 @@ fun SwipeableCard(
                 }
                 
                 // Swipe Indicators
-                // Swipe Indicators
                 val swipeThreshold = maxWidthPx * 0.15f
-                val swipeProgress = (offsetX.value.absoluteValue / swipeThreshold).coerceIn(0f, 1f)
+                val swipeProgress = (finalOffsetX.absoluteValue / swipeThreshold).coerceIn(0f, 1f)
                 
-                if (offsetX.value > 0) {
+                if (finalOffsetX > 0) {
                     // KEEP Indicator
                     Box(
                         modifier = Modifier
@@ -251,7 +316,7 @@ fun SwipeableCard(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
-                                imageVector = Icons.Default.Favorite, // Or Check
+                                imageVector = Icons.Default.Favorite,
                                 contentDescription = "Keep",
                                 tint = Color.White,
                                 modifier = Modifier.size(48.dp)
@@ -264,7 +329,7 @@ fun SwipeableCard(
                             )
                         }
                     }
-                } else if (offsetX.value < 0) {
+                } else if (finalOffsetX < 0) {
                     // DELETE Indicator
                     Box(
                         modifier = Modifier
@@ -295,33 +360,6 @@ fun SwipeableCard(
                     }
                 }
             }
-        }
-    }
-}
-
-suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectSwipe(
-    onSwipeLeft: () -> Unit,
-    onSwipeRight: () -> Unit,
-    onDrag: (change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Offset) -> Unit,
-    onDragEnd: () -> Unit
-) {
-    awaitPointerEventScope {
-        while (true) {
-            val down = awaitFirstDown()
-            var dragAmount = Offset.Zero
-            do {
-                val event = awaitPointerEvent()
-                val changes = event.changes
-                val change = changes.firstOrNull()
-                if (change != null) {
-                    val changeAmount = change.positionChange()
-                    dragAmount += changeAmount
-                    onDrag(change, changeAmount)
-                    change.consume()
-                }
-            } while (changes.any { it.pressed })
-            
-            onDragEnd()
         }
     }
 }
