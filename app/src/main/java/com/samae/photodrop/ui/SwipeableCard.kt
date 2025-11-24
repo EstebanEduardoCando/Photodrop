@@ -1,39 +1,51 @@
 package com.samae.photodrop.ui
 
+import android.text.format.DateUtils
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.calculateTargetValue
-import androidx.compose.animation.splineBasedDecay
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.samae.photodrop.data.Photo
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
@@ -48,6 +60,7 @@ fun SwipeableCard(
     val offsetY = remember { Animatable(0f) }
     val rotation = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
+    var isPlaying by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -57,14 +70,12 @@ fun SwipeableCard(
                 detectSwipe(
                     onSwipeLeft = {
                         scope.launch {
-                            // Animate away
                             offsetX.animateTo(-size.width.toFloat() * 1.5f)
                             onSwipeLeft()
                         }
                     },
                     onSwipeRight = {
                         scope.launch {
-                            // Animate away
                             offsetX.animateTo(size.width.toFloat() * 1.5f)
                             onSwipeRight()
                         }
@@ -73,12 +84,11 @@ fun SwipeableCard(
                         scope.launch {
                             offsetX.snapTo(offsetX.value + dragAmount.x)
                             offsetY.snapTo(offsetY.value + dragAmount.y)
-                            rotation.snapTo(offsetX.value / 60) // Rotate based on X
+                            rotation.snapTo(offsetX.value / 60)
                         }
                     },
                     onDragEnd = {
                         scope.launch {
-                            // Reset if not swiped far enough
                             if (offsetX.value.absoluteValue < size.width / 4) {
                                 offsetX.animateTo(0f)
                                 offsetY.animateTo(0f)
@@ -96,30 +106,107 @@ fun SwipeableCard(
                     }
                 )
             }
+            .pointerInput(Unit) {
+                if (photo.isVideo) {
+                    detectTapGestures(
+                        onPress = {
+                            isPlaying = true
+                            tryAwaitRelease()
+                            isPlaying = false
+                        }
+                    )
+                }
+            }
     ) {
         Card(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            shape = RoundedCornerShape(24.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                AsyncImage(
-                    model = photo.uri,
-                    contentDescription = "Photo",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
+                if (photo.isVideo && isPlaying) {
+                    VideoPlayer(
+                        uri = photo.uri,
+                        isPlaying = isPlaying,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    AsyncImage(
+                        model = photo.uri,
+                        contentDescription = "Photo",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    
+                    if (photo.isVideo) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.3f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Play",
+                                tint = Color.White,
+                                modifier = Modifier.size(64.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Metadata Overlay (Top Gradient)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)
+                            )
+                        )
+                        .padding(16.dp)
+                        .align(Alignment.TopCenter)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(photo.dateAdded * 1000)),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White
+                            )
+                            Text(
+                                text = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(photo.dateAdded * 1000)),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.8f)
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        if (photo.isVideo) {
+                            Text(
+                                text = DateUtils.formatElapsedTime(photo.duration / 1000),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Color.White,
+                                modifier = Modifier
+                                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
                 
-                // Overlay for Swipe Indication (Optional)
+                // Swipe Indicators
                 if (offsetX.value > 0) {
                     Text(
                         text = "KEEP",
                         color = Color.Green,
                         style = MaterialTheme.typography.displayLarge,
                         modifier = Modifier
-                            .align(Alignment.TopStart)
+                            .align(Alignment.CenterStart)
                             .padding(32.dp)
                             .rotate(-15f)
                     )
@@ -129,7 +216,7 @@ fun SwipeableCard(
                         color = Color.Red,
                         style = MaterialTheme.typography.displayLarge,
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
+                            .align(Alignment.CenterEnd)
                             .padding(32.dp)
                             .rotate(15f)
                     )
