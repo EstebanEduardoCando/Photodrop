@@ -1,0 +1,167 @@
+package com.samae.photodrop.ui
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.calculateTargetValue
+import androidx.compose.animation.splineBasedDecay
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import com.samae.photodrop.data.Photo
+import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
+
+@Composable
+fun SwipeableCard(
+    photo: Photo,
+    onSwipeLeft: () -> Unit,
+    onSwipeRight: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val offsetX = remember { Animatable(0f) }
+    val offsetY = remember { Animatable(0f) }
+    val rotation = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+
+    Box(
+        modifier = modifier
+            .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
+            .rotate(rotation.value)
+            .pointerInput(Unit) {
+                detectSwipe(
+                    onSwipeLeft = {
+                        scope.launch {
+                            // Animate away
+                            offsetX.animateTo(-size.width.toFloat() * 1.5f)
+                            onSwipeLeft()
+                        }
+                    },
+                    onSwipeRight = {
+                        scope.launch {
+                            // Animate away
+                            offsetX.animateTo(size.width.toFloat() * 1.5f)
+                            onSwipeRight()
+                        }
+                    },
+                    onDrag = { change, dragAmount ->
+                        scope.launch {
+                            offsetX.snapTo(offsetX.value + dragAmount.x)
+                            offsetY.snapTo(offsetY.value + dragAmount.y)
+                            rotation.snapTo(offsetX.value / 60) // Rotate based on X
+                        }
+                    },
+                    onDragEnd = {
+                        scope.launch {
+                            // Reset if not swiped far enough
+                            if (offsetX.value.absoluteValue < size.width / 4) {
+                                offsetX.animateTo(0f)
+                                offsetY.animateTo(0f)
+                                rotation.animateTo(0f)
+                            } else {
+                                if (offsetX.value > 0) {
+                                    offsetX.animateTo(size.width.toFloat() * 1.5f)
+                                    onSwipeRight()
+                                } else {
+                                    offsetX.animateTo(-size.width.toFloat() * 1.5f)
+                                    onSwipeLeft()
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                AsyncImage(
+                    model = photo.uri,
+                    contentDescription = "Photo",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                
+                // Overlay for Swipe Indication (Optional)
+                if (offsetX.value > 0) {
+                    Text(
+                        text = "KEEP",
+                        color = Color.Green,
+                        style = MaterialTheme.typography.displayLarge,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(32.dp)
+                            .rotate(-15f)
+                    )
+                } else if (offsetX.value < 0) {
+                    Text(
+                        text = "DELETE",
+                        color = Color.Red,
+                        style = MaterialTheme.typography.displayLarge,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(32.dp)
+                            .rotate(15f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectSwipe(
+    onSwipeLeft: () -> Unit,
+    onSwipeRight: () -> Unit,
+    onDrag: (change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Offset) -> Unit,
+    onDragEnd: () -> Unit
+) {
+    awaitPointerEventScope {
+        while (true) {
+            val down = awaitFirstDown()
+            var dragAmount = Offset.Zero
+            do {
+                val event = awaitPointerEvent()
+                val changes = event.changes
+                val change = changes.firstOrNull()
+                if (change != null) {
+                    val changeAmount = change.positionChange()
+                    dragAmount += changeAmount
+                    onDrag(change, changeAmount)
+                    change.consume()
+                }
+            } while (changes.any { it.pressed })
+            
+            onDragEnd()
+        }
+    }
+}
