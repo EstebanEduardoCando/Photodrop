@@ -90,11 +90,12 @@ class PhotoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun swipeRight(photo: Photo) {
-        // Keep the photo, save to DB so it doesn't show up again
+        // IMMEDIATE UI update - remove from list first
+        removePhotoFromList(photo)
+        // THEN save to DB asynchronously (fire and forget)
         viewModelScope.launch {
             repository.keepPhoto(photo)
         }
-        removePhotoFromList(photo)
     }
 
     fun confirmDeletes() {

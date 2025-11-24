@@ -73,74 +73,50 @@ fun SwipeableCard(
             .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
             .rotate(rotation.value)
             .pointerInput(Unit) {
-                val widthPx = size.width.toFloat() // pointerInput gives size in pixels
+                val widthPx = size.width.toFloat()
                 detectSwipe(
                     onSwipeLeft = {
-                        scope.launch {
-                            offsetX.animateTo(
-                                targetValue = -widthPx * 1.5f,
-                                animationSpec = androidx.compose.animation.core.spring(
-                                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
-                                )
-                            )
-                            onSwipeLeft()
-                        }
+                        // Trigger callback immediately, no animation here
+                        onSwipeLeft()
                     },
                     onSwipeRight = {
-                        scope.launch {
-                            offsetX.animateTo(
-                                targetValue = size.width.toFloat() * 1.5f,
-                                animationSpec = androidx.compose.animation.core.spring(
-                                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
-                                )
-                            )
-                            onSwipeRight()
-                        }
+                        // Trigger callback immediately, no animation here
+                        onSwipeRight()
                     },
                     onDrag = { change, dragAmount ->
-                        scope.launch {
-                            offsetX.snapTo(offsetX.value + dragAmount.x)
-                            offsetY.snapTo(offsetY.value + dragAmount.y)
-                            rotation.snapTo(offsetX.value / 60)
-                        }
+                        // Direct snap - no coroutine launch for every drag event
+                        offsetX.snapTo(offsetX.value + dragAmount.x)
+                        offsetY.snapTo(offsetY.value + dragAmount.y)
+                        rotation.snapTo(offsetX.value / 60)
                     },
                     onDragEnd = {
                         scope.launch {
-                            // Reduced threshold to 15% of width for easier swipe
                             val width = size.width.toFloat()
+                            val threshold = width * 0.20f // Slightly higher threshold for better control
                             
-                            if (offsetX.value.absoluteValue < width * 0.15f) {
+                            if (offsetX.value.absoluteValue < threshold) {
+                                // Snap back to center - fast animation
                                 offsetX.animateTo(
                                     targetValue = 0f,
-                                    animationSpec = androidx.compose.animation.core.spring(
-                                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-                                        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+                                    animationSpec = androidx.compose.animation.core.tween(
+                                        durationMillis = 200,
+                                        easing = androidx.compose.animation.core.FastOutSlowInEasing
                                     )
                                 )
-                                offsetY.animateTo(0f)
-                                rotation.animateTo(0f)
+                                offsetY.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(200))
+                                rotation.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(200))
                             } else {
-                                if (offsetX.value > 0) {
-                                    offsetX.animateTo(
-                                        targetValue = width * 1.5f,
-                                        animationSpec = androidx.compose.animation.core.spring(
-                                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-                                            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
-                                        )
+                                // Swipe out - VERY fast animation
+                                val targetX = if (offsetX.value > 0) width * 2f else -width * 2f
+                                offsetX.animateTo(
+                                    targetValue = targetX,
+                                    animationSpec = androidx.compose.animation.core.tween(
+                                        durationMillis = 150,
+                                        easing = androidx.compose.animation.core.FastOutLinearInEasing
                                     )
-                                    onSwipeRight()
-                                } else {
-                                    offsetX.animateTo(
-                                        targetValue = -width * 1.5f,
-                                        animationSpec = androidx.compose.animation.core.spring(
-                                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-                                            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
-                                        )
-                                    )
-                                    onSwipeLeft()
-                                }
+                                )
+                                // Call action based on direction
+                                if (offsetX.value > 0) onSwipeRight() else onSwipeLeft()
                             }
                         }
                     }
