@@ -5,6 +5,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -34,6 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.positionChange
@@ -63,16 +67,17 @@ fun SwipeableCard(
     val scope = rememberCoroutineScope()
     var isPlaying by remember { mutableStateOf(false) }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
             .rotate(rotation.value)
             .pointerInput(Unit) {
+                val widthPx = size.width.toFloat() // pointerInput gives size in pixels
                 detectSwipe(
                     onSwipeLeft = {
                         scope.launch {
                             offsetX.animateTo(
-                                targetValue = -size.width.toFloat() * 1.5f,
+                                targetValue = -widthPx * 1.5f,
                                 animationSpec = androidx.compose.animation.core.spring(
                                     dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
                                     stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
@@ -103,7 +108,7 @@ fun SwipeableCard(
                     onDragEnd = {
                         scope.launch {
                             // Reduced threshold to 15% of width for easier swipe
-                            if (offsetX.value.absoluteValue < size.width * 0.15f) {
+                            if (offsetX.value.absoluteValue < size.width.toFloat() * 0.15f) {
                                 offsetX.animateTo(
                                     targetValue = 0f,
                                     animationSpec = androidx.compose.animation.core.spring(
@@ -232,7 +237,9 @@ fun SwipeableCard(
                 }
                 
                 // Swipe Indicators
-                val swipeThreshold = size.width * 0.15f
+                // Swipe Indicators
+                val widthPx = with(LocalDensity.current) { maxWidth.toPx() }
+                val swipeThreshold = widthPx * 0.15f
                 val swipeProgress = (offsetX.value.absoluteValue / swipeThreshold).coerceIn(0f, 1f)
                 
                 if (offsetX.value > 0) {
