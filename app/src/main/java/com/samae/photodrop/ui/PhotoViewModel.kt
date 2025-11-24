@@ -31,6 +31,9 @@ class PhotoViewModel(application: Application) : AndroidViewModel(application) {
     private val _permissionNeededForDelete = MutableStateFlow<IntentSender?>(null)
     val permissionNeededForDelete: StateFlow<IntentSender?> = _permissionNeededForDelete.asStateFlow()
 
+    private val _deletionSummary = MutableStateFlow<String?>(null)
+    val deletionSummary: StateFlow<String?> = _deletionSummary.asStateFlow()
+
     init {
         loadFolders()
         loadPhotos()
@@ -62,7 +65,10 @@ class PhotoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun swipeRight(photo: Photo) {
-        // Keep the photo, just remove from view
+        // Keep the photo, save to DB so it doesn't show up again
+        viewModelScope.launch {
+            repository.keepPhoto(photo)
+        }
         removePhotoFromList(photo)
     }
 
@@ -71,12 +77,15 @@ class PhotoViewModel(application: Application) : AndroidViewModel(application) {
             val photosToDelete = _pendingDeletes.value
             if (photosToDelete.isEmpty()) return@launch
 
+            val totalSize = photosToDelete.sumOf { it.size }
+            val count = photosToDelete.size
+
             val intentSender = repository.deletePhotos(photosToDelete)
             if (intentSender != null) {
                 _permissionNeededForDelete.value = intentSender
             } else {
-                // Deletion successful or not needed
-                _pendingDeletes.value = emptyList()
+                // Deletion successful or not needed (Android 10 or below with permission)
+                onDeletionSuccess(count, totalSize)
             }
         }
     }
@@ -107,12 +116,25 @@ class PhotoViewModel(application: Application) : AndroidViewModel(application) {
     fun onPermissionResult(resultOk: Boolean) {
         if (resultOk) {
             // Permission granted, photos should be deleted by system (Android 11+)
-            // or we might need to retry (Android 10).
-            // For simplicity, we assume success and clear pending.
-            _pendingDeletes.value = emptyList()
+            val photosToDelete = _pendingDeletes.value
+            val totalSize = photosToDelete.sumOf { it.size }
+            val count = photosToDelete.size
+            
+            onDeletionSuccess(count, totalSize)
+            
             // Reload to sync
             loadPhotos()
         }
         _permissionNeededForDelete.value = null
+    }
+
+    private fun onDeletionSuccess(count: Int, totalSizeBytes: Long) {
+        _pendingDeletes.value = emptyList()
+        val sizeMb = totalSizeBytes / (1024 * 1024f)
+        _deletionSummary.value = "Cleaned $count photos, freed ${String.format("%.2f", sizeMb)} MB"
+    }
+
+    fun clearDeletionSummary() {
+        _deletionSummary.value = null
     }
 }

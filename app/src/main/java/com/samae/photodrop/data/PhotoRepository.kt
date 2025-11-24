@@ -14,6 +14,9 @@ import kotlinx.coroutines.withContext
 
 class PhotoRepository(private val context: Context) {
 
+    private val database = AppDatabase.getDatabase(context)
+    private val keptPhotoDao = database.keptPhotoDao()
+
     suspend fun getFolders(): List<Folder> = withContext(Dispatchers.IO) {
         val folders = mutableListOf<Folder>()
         val folderMap = mutableMapOf<String, Pair<String, Int>>()
@@ -67,6 +70,7 @@ class PhotoRepository(private val context: Context) {
 
     suspend fun getPhotos(bucketId: String? = null): List<Photo> = withContext(Dispatchers.IO) {
         val photos = mutableListOf<Photo>()
+        val keptIds = keptPhotoDao.getAllIds().toSet()
 
         // Query Images
         photos.addAll(queryMedia(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, bucketId, false))
@@ -74,8 +78,9 @@ class PhotoRepository(private val context: Context) {
         // Query Videos
         photos.addAll(queryMedia(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, bucketId, true))
 
-        // Sort by date added descending
-        photos.sortedByDescending { it.dateAdded }
+        // Filter out kept photos and sort
+        photos.filter { !keptIds.contains(it.id) }
+            .sortedByDescending { it.dateAdded }
     }
 
     private fun queryMedia(collection: Uri, bucketId: String?, isVideo: Boolean): List<Photo> {
@@ -125,6 +130,10 @@ class PhotoRepository(private val context: Context) {
             e.printStackTrace()
         }
         return photos
+    }
+
+    suspend fun keepPhoto(photo: Photo) = withContext(Dispatchers.IO) {
+        keptPhotoDao.insert(KeptPhoto(photo.id, photo.uri.toString(), photo.dateAdded))
     }
 
     suspend fun deletePhotos(photos: List<Photo>): IntentSender? = withContext(Dispatchers.IO) {

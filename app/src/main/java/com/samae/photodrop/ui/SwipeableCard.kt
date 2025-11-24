@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -70,13 +71,25 @@ fun SwipeableCard(
                 detectSwipe(
                     onSwipeLeft = {
                         scope.launch {
-                            offsetX.animateTo(-size.width.toFloat() * 1.5f)
+                            offsetX.animateTo(
+                                targetValue = -size.width.toFloat() * 1.5f,
+                                animationSpec = androidx.compose.animation.core.spring(
+                                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
+                                )
+                            )
                             onSwipeLeft()
                         }
                     },
                     onSwipeRight = {
                         scope.launch {
-                            offsetX.animateTo(size.width.toFloat() * 1.5f)
+                            offsetX.animateTo(
+                                targetValue = size.width.toFloat() * 1.5f,
+                                animationSpec = androidx.compose.animation.core.spring(
+                                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
+                                )
+                            )
                             onSwipeRight()
                         }
                     },
@@ -89,16 +102,35 @@ fun SwipeableCard(
                     },
                     onDragEnd = {
                         scope.launch {
-                            if (offsetX.value.absoluteValue < size.width / 4) {
-                                offsetX.animateTo(0f)
+                            // Reduced threshold to 15% of width for easier swipe
+                            if (offsetX.value.absoluteValue < size.width * 0.15f) {
+                                offsetX.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = androidx.compose.animation.core.spring(
+                                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                                        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+                                    )
+                                )
                                 offsetY.animateTo(0f)
                                 rotation.animateTo(0f)
                             } else {
                                 if (offsetX.value > 0) {
-                                    offsetX.animateTo(size.width.toFloat() * 1.5f)
+                                    offsetX.animateTo(
+                                        targetValue = size.width.toFloat() * 1.5f,
+                                        animationSpec = androidx.compose.animation.core.spring(
+                                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                                            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
+                                        )
+                                    )
                                     onSwipeRight()
                                 } else {
-                                    offsetX.animateTo(-size.width.toFloat() * 1.5f)
+                                    offsetX.animateTo(
+                                        targetValue = -size.width.toFloat() * 1.5f,
+                                        animationSpec = androidx.compose.animation.core.spring(
+                                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                                            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
+                                        )
+                                    )
                                     onSwipeLeft()
                                 }
                             }
@@ -200,26 +232,67 @@ fun SwipeableCard(
                 }
                 
                 // Swipe Indicators
+                val swipeThreshold = size.width * 0.15f
+                val swipeProgress = (offsetX.value.absoluteValue / swipeThreshold).coerceIn(0f, 1f)
+                
                 if (offsetX.value > 0) {
-                    Text(
-                        text = "KEEP",
-                        color = Color.Green,
-                        style = MaterialTheme.typography.displayLarge,
+                    // KEEP Indicator
+                    Box(
                         modifier = Modifier
                             .align(Alignment.CenterStart)
                             .padding(32.dp)
                             .rotate(-15f)
-                    )
+                            .graphicsLayer { alpha = swipeProgress }
+                            .background(
+                                color = Color.Green.copy(alpha = 0.8f),
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                            .padding(horizontal = 24.dp, vertical = 12.dp)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Favorite, // Or Check
+                                contentDescription = "Keep",
+                                tint = Color.White,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Text(
+                                text = "KEEP",
+                                color = Color.White,
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                        }
+                    }
                 } else if (offsetX.value < 0) {
-                    Text(
-                        text = "DELETE",
-                        color = Color.Red,
-                        style = MaterialTheme.typography.displayLarge,
+                    // DELETE Indicator
+                    Box(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
                             .padding(32.dp)
                             .rotate(15f)
-                    )
+                            .graphicsLayer { alpha = swipeProgress }
+                            .background(
+                                color = Color.Red.copy(alpha = 0.8f),
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                            .padding(horizontal = 24.dp, vertical = 12.dp)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete",
+                                tint = Color.White,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Text(
+                                text = "DELETE",
+                                color = Color.White,
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             }
         }

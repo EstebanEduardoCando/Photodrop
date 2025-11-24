@@ -122,8 +122,10 @@ class MainActivity : ComponentActivity() {
         val selectedFolder by viewModel.selectedFolder.collectAsState()
         val pendingDeletes by viewModel.pendingDeletes.collectAsState()
         val permissionIntent by viewModel.permissionNeededForDelete.collectAsState()
+        val deletionSummary by viewModel.deletionSummary.collectAsState()
 
         var showFolderDropdown by remember { mutableStateOf(false) }
+        val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
 
         LaunchedEffect(permissionIntent) {
             permissionIntent?.let { intentSender ->
@@ -132,7 +134,15 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        LaunchedEffect(deletionSummary) {
+            deletionSummary?.let { message ->
+                snackbarHostState.showSnackbar(message)
+                viewModel.clearDeletionSummary()
+            }
+        }
+
         Scaffold(
+            snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(
