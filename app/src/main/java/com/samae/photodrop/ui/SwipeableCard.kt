@@ -155,6 +155,7 @@ fun SwipeableCard(
                 }
             }
     ) {
+        val maxWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
         Card(
             modifier = Modifier
                 .fillMaxSize()
@@ -238,8 +239,7 @@ fun SwipeableCard(
                 
                 // Swipe Indicators
                 // Swipe Indicators
-                val widthPx = with(LocalDensity.current) { maxWidth.toPx() }
-                val swipeThreshold = widthPx * 0.15f
+                val swipeThreshold = maxWidthPx * 0.15f
                 val swipeProgress = (offsetX.value.absoluteValue / swipeThreshold).coerceIn(0f, 1f)
                 
                 if (offsetX.value > 0) {
