@@ -164,7 +164,6 @@ fun SwipeableCard(
                     )
                 }
             }
-            }
     ) {
         val maxWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
         Card(
