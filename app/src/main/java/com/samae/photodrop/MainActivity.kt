@@ -325,7 +325,7 @@ class MainActivity : ComponentActivity() {
                                 photo = photos[1],
                                 onSwipeLeft = {},
                                 onSwipeRight = {},
-                                onSwipeUp = {},
+                                onDoubleTap = {},
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .graphicsLayer {
@@ -344,7 +344,7 @@ class MainActivity : ComponentActivity() {
                             photo = photos[0],
                             onSwipeLeft = { viewModel.swipeLeft(photos[0]) },
                             onSwipeRight = { viewModel.swipeRight(photos[0]) },
-                            onSwipeUp = { selectedPhotoForDetails = photos[0] },
+                            onDoubleTap = { selectedPhotoForDetails = photos[0] },
                             modifier = Modifier.fillMaxSize()
                         )
                     }

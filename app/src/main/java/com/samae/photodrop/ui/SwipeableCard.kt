@@ -59,7 +59,7 @@ fun SwipeableCard(
     photo: Photo,
     onSwipeLeft: () -> Unit,
     onSwipeRight: () -> Unit,
-    onSwipeUp: () -> Unit,
+    onDoubleTap: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val offsetX = remember { Animatable(0f) }
@@ -99,21 +99,6 @@ fun SwipeableCard(
                             onSwipeRight()
                         }
                     },
-                    onSwipeUp = {
-                        scope.launch {
-                            // Animate back to center after swipe up (or animate out if desired, but usually details view opens)
-                             offsetX.animateTo(
-                                targetValue = 0f,
-                                animationSpec = androidx.compose.animation.core.spring(
-                                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
-                                )
-                            )
-                            offsetY.animateTo(0f)
-                            rotation.animateTo(0f)
-                            onSwipeUp()
-                        }
-                    },
                     onDrag = { change, dragAmount ->
                         scope.launch {
                             offsetX.snapTo(offsetX.value + dragAmount.x)
@@ -125,16 +110,8 @@ fun SwipeableCard(
                         scope.launch {
                             // Reduced threshold to 15% of width for easier swipe
                             val width = size.width.toFloat()
-                            val height = size.height.toFloat()
                             
-                            if (offsetY.value < -height * 0.15f) {
-                                // Swipe Up detected
-                                onSwipeUp()
-                                // Reset position
-                                offsetX.animateTo(0f)
-                                offsetY.animateTo(0f)
-                                rotation.animateTo(0f)
-                            } else if (offsetX.value.absoluteValue < width * 0.15f) {
+                            if (offsetX.value.absoluteValue < width * 0.15f) {
                                 offsetX.animateTo(
                                     targetValue = 0f,
                                     animationSpec = androidx.compose.animation.core.spring(
@@ -170,6 +147,13 @@ fun SwipeableCard(
                 )
             }
             .pointerInput(Unit) {
+                detectTapGestures(
+                    onDoubleTap = {
+                        onDoubleTap()
+                    }
+                )
+            }
+            .pointerInput(Unit) {
                 if (photo.isVideo) {
                     detectTapGestures(
                         onPress = {
@@ -179,6 +163,7 @@ fun SwipeableCard(
                         }
                     )
                 }
+            }
             }
     ) {
         val maxWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
@@ -342,7 +327,6 @@ fun SwipeableCard(
 suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectSwipe(
     onSwipeLeft: () -> Unit,
     onSwipeRight: () -> Unit,
-    onSwipeUp: () -> Unit,
     onDrag: (change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Offset) -> Unit,
     onDragEnd: () -> Unit
 ) {
