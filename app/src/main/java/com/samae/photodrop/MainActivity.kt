@@ -57,7 +57,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import com.samae.photodrop.data.UserPreferences
+import com.samae.photodrop.ui.OnboardingScreen
 import com.samae.photodrop.ui.PhotoViewModel
+import kotlinx.coroutines.launch
 import com.samae.photodrop.ui.SwipeableCard
 import com.samae.photodrop.ui.theme.PhotodropTheme
 
@@ -76,8 +80,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private lateinit var userPreferences: UserPreferences
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        userPreferences = UserPreferences(this)
         
         checkPermissions()
 
@@ -87,7 +94,23 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = Color(0xFF121212) // Dark background
                 ) {
-                    MainScreen(viewModel, ::checkPermissions, ::openSettings)
+                    val isFirstLaunch by userPreferences.isFirstLaunch.collectAsState(initial = null)
+
+                    when (isFirstLaunch) {
+                        true -> {
+                            com.samae.photodrop.ui.OnboardingScreen(onFinished = {
+                                androidx.lifecycle.lifecycleScope.launch {
+                                    userPreferences.completeOnboarding()
+                                }
+                            })
+                        }
+                        false -> {
+                            MainScreen(viewModel, ::checkPermissions, ::openSettings)
+                        }
+                        null -> {
+                            // Loading state, keep splash or empty
+                        }
+                    }
                 }
             }
         }
