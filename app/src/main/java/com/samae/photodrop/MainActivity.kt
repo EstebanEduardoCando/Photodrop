@@ -99,7 +99,7 @@ class MainActivity : ComponentActivity() {
                     when (isFirstLaunch) {
                         true -> {
                             com.samae.photodrop.ui.OnboardingScreen(onFinished = {
-                                androidx.lifecycle.lifecycleScope.launch {
+                                lifecycleScope.launch {
                                     userPreferences.completeOnboarding()
                                 }
                             })
